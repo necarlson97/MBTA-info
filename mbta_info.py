@@ -1,16 +1,22 @@
-# TODO DOC IMPORTS
-import requests
-import math
-import sys
+import requests  # Used as a simple way to perform our http gets
+import math  # Used to get a max-numeric-constant, useful in sorting
+import sys  # Used to retrieve the command line call arguments
 
 
-# TODO DOC & REMOVE
-API_KEY = 'e0bf1c55aaa243abb06d15ab0a05950b'
+# Here one can add their own api key (or leave as None)
+# See https://api-v3.mbta.com/ for details on recieveing an api key
+API_KEY = None
 
 
 def call_mbta_api(endpoint, filter_type, filter_value):
     """
-    TODO DOC
+    A function for easily calling the mbta api, as we use the same
+    base url multiple times, but with different filter keys/values.
+
+    This function also does the job of checking that the response
+    json/dict contains a 'data' field, and returns that data dict.
+    See https://api-v3.mbta.com/docs/swagger/index.html for more details
+    on how the mbta api is intended to be used.
     """
     url = f'https://api-v3.mbta.com/{endpoint}'
     params = {
@@ -34,18 +40,10 @@ def call_mbta_api(endpoint, filter_type, filter_value):
     return data
 
 
-def get_routes_data():
-    """
-    TODO DOC
-    """
-    # Call the routes endpoint, filtering on route types 0 and 1
-    # (light rail and heavy rail)
-    return call_mbta_api('routes', 'type', '0,1')
-
-
 def get_data_dict(data, kept_attributes=None):
     """
-    TODO DOC
+    Given a data dict as returned by the mbta api, strip out only the
+    specified attributes from the response.
     """
     attrs = data.get('attributes', {})
     return {k: v for k, v in attrs.items()
@@ -55,7 +53,14 @@ def get_data_dict(data, kept_attributes=None):
 
 def get_stops_data(route_id):
     """
-    TODO DOC
+    Call the mbta stops api on a specific route id, returning a dictionay
+    of this routes stops: stop_id -> stop_info_dict
+
+    Each stop_info_dict contains:
+        name: e.g. "Plesant Street"
+
+    Note: this implementation can be easily extended to add additional info
+    from the api's returned stop info.
     """
     data = call_mbta_api('stops', 'route', route_id)
 
@@ -67,9 +72,24 @@ def get_stops_data(route_id):
 
 def get_subway_data():
     """
-    TODO DOC
+    Call the mbta routes api to retrieve route
+    info for all subway routes. (Subway as defined by light or heavy rail).
+
+    A dict is returned containing:
+        route_id -> route_info_dict
+
+    Each route_info_dict contains the following info:
+        long_name: e.g. "Red Line"
+        stops_dict: a dictionary of stop_ids -> stop_info_dict
+        See get_stops_data for more details
+
+    Note: this implementation can be easily extended to add additional info
+    from the api's returned route info.
     """
-    data = get_routes_data()
+    # Call the routes endpoint, filtering on route types 0 and 1
+    # (light rail and heavy rail)
+    data = call_mbta_api('routes', 'type', '0,1')
+
     # Here we place the data into a dictionary, key-ing each line on it's
     # id field (which can be assumed to be unique).
     # We filter out only the desired attributes to keep the dictionary
@@ -77,7 +97,7 @@ def get_subway_data():
     kept_keys = ['long_name']
     data_dict = {d.get('id'): get_data_dict(d, kept_keys) for d in data}
 
-    # For each route, add a 'stops_ict' entry which contains
+    # For each route, add a 'stops_dict' entry which contains
     # the stop_id -> stop_data for all stops on this route.
     # NOTE: see get_stops_data for additional details on what is considered
     # 'stop_data'
@@ -90,7 +110,7 @@ def get_subway_data():
 
 def print_names(data_dict):
     """
-    TODO DOC
+    Given the subway_data_dict, print out the names for each route.
     """
 
     # Small helper function to be used in the list comprehension for
@@ -106,6 +126,10 @@ def print_names(data_dict):
 
 
 def print_system_info(data_dict):
+    """
+    Given the subway_data_dict, calculate and print out the longest route,
+    shortest route, and subway stops that connect routes.
+    """
 
     # For calculating the minimum and maximum route by stop count
     min_stops = math.inf
@@ -148,9 +172,13 @@ def print_system_info(data_dict):
 
 def print_connecting_routes(data_dict, start_name, end_name):
     """
-    TODO DOC
+    Given the subway_data_dict, a station start_name and a station end_name,
+    return a set of routes that connect these stations.
     """
 
+    # TODO this shares some simmilar logic to the function above,
+    # but for readibiliteis sake, they are left seperate as they achieve
+    # slighly different outputs when iterating through the subway data
     stop_routes = {}
     route_stops = {}
     for route_id, route_data in data_dict.items():
@@ -162,6 +190,14 @@ def print_connecting_routes(data_dict, start_name, end_name):
             stop_routes.setdefault(stop_name, []).append(route_name)
             route_stops.setdefault(route_name, []).append(stop_name)
 
+    # TODO currenly, we use a bredth-first-search for simplicity.
+    # In the future, to provide more accurate and fast directions, one could
+    # include:
+    # 1. A* Search using long/lat of stations, or even better, actual
+    # track time & vehicle speed when connecting routes
+    # 2. Current track outtages / conditions
+    # 3. Current route traffic
+    # 4. Additional deciding factors, like trip cost vs trip time
     routes = BFS(route_stops, stop_routes, start_name, end_name)
 
     print(f'Routes to get from {start_name} to {end_name}:')
@@ -171,7 +207,18 @@ def print_connecting_routes(data_dict, start_name, end_name):
 
 def BFS(route_stops, stop_routes, start_name, end_name):
     """
-    TODO DOC
+    A breath first search implementation that takes into accound the
+    route / stop archatecture is slighly different than the typical
+    nodes in a graph archatecture.
+
+    Inputs:
+        route_stops - a dictionary of route names to their stops
+        stop_routes - the 'inverse': a dict of stop names to their routes
+        start_name - the name of the starting subway station
+        end_name - the name of the ending subway station
+
+    Additionally, catches start_name or end_name not being valid subway stop
+    names.
     """
 
     if start_name not in stop_routes:
@@ -202,6 +249,8 @@ def BFS(route_stops, stop_routes, start_name, end_name):
     return visited
 
 
+# The following static strings serve to create the defualt printout
+# as help text for this CLI
 CLI_CALL = 'python mbta_info'
 HELP_TXT = f"""
 A comand line tool for printing information on the mbta subway system.
@@ -223,7 +272,8 @@ Uses:
 
 if __name__ == '__main__':
     """
-    TODO ARGS AND HELP TEXT
+    This main function serves to have this script operate as a simple CLI,
+    accepting arguments to call commands, and printing help text as needed.
     """
 
     def get_arg(n):
