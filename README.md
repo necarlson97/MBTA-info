@@ -13,6 +13,6 @@ Then, run the script with:
 ```
 python mbta_info.py
 ```
-The script will promp the user with help text, given further instructions as to the usage of this cli.
+The script will promp the user with help text, giving further instructions as to the usage of this cli.
 
 Thanks! Feel free to reach out with any questions.
